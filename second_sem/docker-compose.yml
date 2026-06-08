@@ -1,0 +1,141 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: second-sem-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+
+  minio:
+    image: minio/minio:latest
+    container_name: second-sem-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - minio-data:/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: second-sem-clickhouse
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    ports:
+      - "8124:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+
+  prefect-server:
+    image: prefecthq/prefect:3-python3.12
+    container_name: second-sem-prefect-server
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/prefect
+    ports:
+      - "4200:4200"
+    depends_on:
+      - postgres
+
+  prefect-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: second-sem-prefect-cli
+    command: sleep infinity
+    working_dir: /app
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: etl_source
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: clicks-data
+      PREFECT_API_URL: http://prefect-server:4200/api
+    volumes:
+      - ./:/app
+    depends_on:
+      - postgres
+      - minio
+      - clickhouse
+      - prefect-server
+
+  prefect-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: second-sem-prefect-worker
+    command: prefect worker start --pool semester-2-process-pool --type process --install-policy if-not-present
+    working_dir: /app
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: etl_source
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: clicks-data
+      PREFECT_API_URL: http://prefect-server:4200/api
+    volumes:
+      - ./:/app
+    depends_on:
+      - postgres
+      - minio
+      - clickhouse
+      - prefect-server
+
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    container_name: second-sem-superset
+    command: /bin/sh /app/init-superset.sh
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: second-sem-superset-secret-key
+      SUPERSET_ADMIN_USERNAME: admin
+      SUPERSET_ADMIN_PASSWORD: admin
+      SUPERSET_ADMIN_FIRSTNAME: Superset
+      SUPERSET_ADMIN_LASTNAME: Admin
+      SUPERSET_ADMIN_EMAIL: admin@example.com
+      SUPERSET_CLICKHOUSE_DATABASE_NAME: ClickHouse Local
+      SUPERSET_CLICKHOUSE_URI: clickhousedb://default:clickhouse@clickhouse:8123/default
+    volumes:
+      - ./superset/init-superset.sh:/app/init-superset.sh
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
+      - superset_home:/app/superset_home
+    depends_on:
+      - clickhouse
+
+volumes:
+  postgres_data:
+  minio-data:
+  clickhouse_data:
+  superset_home:

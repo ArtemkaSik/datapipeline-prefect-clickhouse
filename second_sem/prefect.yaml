@@ -1,0 +1,55 @@
+# Welcome to your prefect.yaml file! You can use this file for
+# storing and managing configuration for deploying your flows.
+# We recommend committing this file to source control along
+# with your flow code.
+
+# Generic metadata about this project
+name: app
+prefect-version: 3.7.4
+
+# build section allows you to manage and build docker images
+build:
+
+# push section allows you to manage if and how this project
+# is uploaded to remote locations
+push:
+
+# pull section allows you to provide instructions for cloning
+# this project in remote locations
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /app
+
+# the deployments section allows you to provide configuration
+# for deploying flows
+deployments:
+- name: site-visits-etl
+  version:
+  tags: []
+  concurrency_limit:
+  description:
+  entrypoint: s3_dag.py:etl_flow
+  parameters: {}
+  work_pool:
+    name: semester-2-process-pool
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 0 18 * * 3
+    timezone: Europe/Moscow
+    day_or: true
+- name: user-payments-etl
+  version:
+  tags: []
+  concurrency_limit:
+  description:
+  entrypoint: mysql_dag.py:etl_flow
+  parameters: {}
+  work_pool:
+    name: semester-2-process-pool
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 0 18 * * 3
+    timezone: Europe/Moscow
+    day_or: true

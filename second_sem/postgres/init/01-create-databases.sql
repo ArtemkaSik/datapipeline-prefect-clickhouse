@@ -1,0 +1,2 @@
+CREATE DATABASE etl_source;
+CREATE DATABASE prefect;
